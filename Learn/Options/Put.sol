@@ -5,11 +5,10 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
- * @title Call option
- * @author Draken
- * @notice This is a call option
+ * @title Put Option
+ * @notice 看跌期权合约，允许持有人以固定价格出售标的资产
  */
-contract Call is ERC20, Ownable {
+contract PutOption is ERC20, Ownable {
     uint256 public strikePrice;
     uint256 public expiryDate;
     IERC20 public paymentToken;
@@ -26,16 +25,13 @@ contract Call is ERC20, Ownable {
         uint256 _expiryDate,
         address _paymentToken,
         address _collateralAsset
-    ) ERC20("Call Option", "CALL") Ownable(msg.sender) {
-        require(
-            _expiryDate > block.timestamp,
-            "Expiry date must be in the future"
-        );
+    )
+        ERC20("Put Option", "PUT")
+        Ownable(msg.sender)
+    {
+        require(_expiryDate > block.timestamp, "Expiry date must be in the future");
         require(_paymentToken != address(0), "Invalid payment token address");
-        require(
-            _collateralAsset != address(0),
-            "Invalid collateral asset address"
-        );
+        require(_collateralAsset != address(0), "Invalid collateral asset address");
 
         strikePrice = _strikePrice;
         expiryDate = _expiryDate;
@@ -43,13 +39,12 @@ contract Call is ERC20, Ownable {
         collateralAsset = IERC20(_collateralAsset);
     }
 
-    function mintOptionTokens(uint256 amount) public payable {
-        require(amount > 0, "Amount must be greater than 0");
-        require(msg.value >= amount, "Collateral amount mismatch");
+    function mintOptionTokens(uint256 amount) external {
+        require(amount > 0, "Amount must be greater than zero");
 
         require(
-            collateralAsset.transferFrom(msg.sender, address(this), amount),
-            "Collateral transfer failed"
+            paymentToken.transferFrom(msg.sender, address(this), amount),
+            "Payment transfer failed"
         );
 
         collateralBalances[msg.sender] += amount;
@@ -61,21 +56,11 @@ contract Call is ERC20, Ownable {
         require(block.timestamp <= expiryDate, "Option has expired");
         require(balanceOf(msg.sender) >= amount, "Insufficient option tokens");
 
-        uint256 requiredPayment = (strikePrice * amount) / (10 ** decimals());
+        uint256 requiredPayment = (strikePrice * amount) / (10**decimals());
 
-        require(
-            paymentToken.transferFrom(
-                msg.sender,
-                address(this),
-                requiredPayment
-            ),
-            "Payment transfer failed"
-        );
+        require(collateralAsset.transferFrom(msg.sender, address(this), amount), "Collateral transfer failed");
 
-        require(
-            collateralAsset.transfer(msg.sender, amount),
-            "Collateral transfer failed"
-        );
+        require(paymentToken.transfer(msg.sender, requiredPayment), "Payment transfer failed");
 
         _burn(msg.sender, amount);
         emit OptionExercised(msg.sender, amount);
